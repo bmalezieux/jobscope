@@ -1,0 +1,29 @@
+[project]
+name = "jobscope"
+version = "0.1.0"
+description = "System resource monitoring for compute clusters"
+readme = "README.md"
+authors = [
+    { name = "Benoît Malézieux", email = "benoit.mx2010@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.0.0",
+    "rich>=13.0.0",
+    "textual>=0.40.0",
+    "pandas>=2.0.0",
+    "pyarrow>=14.0.0",
+]
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+bindings = "bin"
+module-name = "jobscope"
+python-source = "src"
+manifest-path = "jobscope-agent/Cargo.toml"
+
+
+
