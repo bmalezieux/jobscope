@@ -38,12 +38,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install dependencies
+        run: uv sync
+
       - name: Start Slurm Cluster
         run: |
           bash tests/integration/start_cluster.sh
-
-      - name: Install dependencies
-        run: uv sync
+          # Fix ownership of files created by docker (root) in mounted volumes
+          sudo chown -R $(whoami) .
 
       - name: Run Integration Tests
         run: |
