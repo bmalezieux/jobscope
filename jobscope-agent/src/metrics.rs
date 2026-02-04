@@ -33,6 +33,7 @@ pub struct ProcessesSnapshot {
 pub struct MemoryLoad {
     pub used_bytes: u64,
     pub total_bytes: u64,
+    pub max_used_bytes: Option<u64>,
 }
 
 #[derive(Serialize)]

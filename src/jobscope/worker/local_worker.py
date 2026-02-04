@@ -7,7 +7,7 @@ from pathlib import Path
 from .utils import find_worker_binary
 
 
-def run_local_worker(output_dir: Path, period: int):
+def run_local_worker(output_dir: Path, period: int, once: bool = False):
     try:
         agent_path = find_worker_binary()
         print(f"Starting worker: {agent_path}")
@@ -16,8 +16,11 @@ def run_local_worker(output_dir: Path, period: int):
             agent_path,
             "--output", str(output_dir),
             "--period", str(period),
-            "--continuous"
+            "--mode", "local",
         ]
+
+        if not once:
+            cmd.append("--continuous")
         
         # Start agent in background
         agent_process = subprocess.Popen(
@@ -31,9 +34,14 @@ def run_local_worker(output_dir: Path, period: int):
         time.sleep(0.5)
         
         if agent_process.poll() is not None:
-            print("Error: Agent failed to start immediately.")
-            print(agent_process.stderr.read().decode())
-            sys.exit(1)
+            # If in once mode and exited successfully, that's fine
+            if once and agent_process.returncode == 0:
+                print("Worker completed successfully (once mode)")
+            else:
+                print("Error: Agent failed to start immediately.")
+                if agent_process.stderr:
+                    print(agent_process.stderr.read().decode())
+                sys.exit(1)
             
     except Exception as e:
         print(f"Failed to start agent: {e}")

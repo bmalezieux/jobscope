@@ -1,6 +1,8 @@
 import argparse
+import os
+import shutil
+from datetime import datetime
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 from jobscope.scope import start_monitoring
 from jobscope.worker import run_agent
@@ -34,19 +36,46 @@ def main() -> None:
 
     parser.add_argument(
         "--jobid",
-        type=int,
+        type=str,
         required=False,
         help="Slurm job ID to monitor (default: local)"
+    )
+
+    parser.add_argument(
+        "--snapshots-dir",
+        type=str,
+        default=".jobscope_snapshots",
+        help="Directory to store snapshot data (default: .jobscope_snapshots in current directory)"
+    )
+
+    parser.add_argument(
+        "--keep-snapshots",
+        action="store_true",
+        help="Keep snapshot files after jobscope exits (default: cleanup)"
+    )
+
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run without TUI (useful for background logging)"
     )
     
     args = parser.parse_args()
 
-    temp_dir = TemporaryDirectory(prefix="jobscope_snapshots_")
-    output_dir = Path(temp_dir.name)
-    print(f"Using temporary directory: {output_dir}")
+    # Create snapshots directory with timestamped subdirectory
+    # This ensures the directory is on a shared filesystem accessible to compute nodes
+    snapshots_base = Path(args.snapshots_dir)
+    if not snapshots_base.is_absolute():
+        snapshots_base = Path.cwd() / snapshots_base
+    
+    # Create timestamped subdirectory for this run
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = snapshots_base / timestamp
+    output_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Using snapshot directory: {output_dir}")
 
     # Spawn agent
-    agent_process = run_agent(output_dir, args.period, args.jobid)    
+    agent_process = run_agent(output_dir, args.period, args.jobid, args.once)    
 
     # Handle signals to ensure cleanup runs
     def signal_handler(sig, frame):
@@ -56,12 +85,30 @@ def main() -> None:
     signal.signal(signal.SIGTERM, signal_handler)
 
     try:
-        # Start the monitoring scope (TUI)
-        start_monitoring(
-            output_dir=str(output_dir),
-            period=args.period,
-            once=args.once
-        )
+        if args.once:
+            print("Refreshed snapshots.")
+            if agent_process:
+                agent_process.wait()
+                
+            from .scope.get_data import get_latest_snapshots_by_node
+            snapshots = get_latest_snapshots_by_node(output_dir)
+            for hostname, snap in snapshots.items():
+                print(f"Node: {hostname}")
+                print(f"  CPU: {snap.cpus_snapshot.average_cpu_usage:.1f}%")
+                print(f"  Mem: {snap.cpus_snapshot.memory.used_gb:.1f}/{snap.cpus_snapshot.memory.total_gb:.1f} GB")
+        elif args.headless:
+            print(f"Running in headless mode. Logs at {output_dir}")
+            print("Press Ctrl+C to stop.")
+            import time
+            while True:
+                time.sleep(1)
+        else:
+            # Start the monitoring scope (TUI)
+            start_monitoring(
+                output_dir=str(output_dir),
+                period=args.period,
+                once=args.once
+            )
 
     except KeyboardInterrupt:
         pass
@@ -72,12 +119,12 @@ def main() -> None:
         
         from .worker.utils import cleanup_agents
         if agent_process:
-            cleanup_agents(agent_process)
+            cleanup_agents(agent_process, args.jobid)
 
         if args.parquet:
             print(f"Exporting data to {args.parquet}...")
             try:
-                from .get_data import export_to_parquet
+                from .scope.get_data import export_to_parquet
                 export_to_parquet(output_dir, Path(args.parquet))
                 print("Export complete.")
             except Exception as e:
@@ -85,6 +132,13 @@ def main() -> None:
                 import traceback
                 traceback.print_exc()
 
-        if temp_dir:
-            print("Cleaning up temporary directory...")
-            temp_dir.cleanup()
+        # Clean up snapshot directory unless --keep-snapshots is set
+        if not args.keep_snapshots:
+            print("Cleaning up snapshot directory...")
+            try:
+                shutil.rmtree(output_dir)
+                print(f"Removed {output_dir}")
+            except Exception as e:
+                print(f"Warning: Could not remove {output_dir}: {e}")
+        else:
+            print(f"Snapshots preserved in: {output_dir}")

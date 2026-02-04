@@ -209,9 +209,14 @@ def export_to_parquet(output_dir: Path, parquet_path: Path) -> None:
             if snap.gpus_snapshot.gpus:
                 row["avg_gpu_usage"] = sum(g.usage_percent for g in snap.gpus_snapshot.gpus) / len(snap.gpus_snapshot.gpus)
                 row["total_gpu_mem_used_gb"] = sum(g.memory_load.used_gb for g in snap.gpus_snapshot.gpus)
+                row["gpu_count"] = len(snap.gpus_snapshot.gpus)
             else:
                 row["avg_gpu_usage"] = 0.0
                 row["total_gpu_mem_used_gb"] = 0.0
+                row["gpu_count"] = 0
+            
+            # Add allocated CPU count
+            row["cpu_count"] = len(snap.cpus_snapshot.cpus)
                 
             data_rows.append(row)
             

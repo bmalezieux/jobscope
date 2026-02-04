@@ -25,5 +25,10 @@ module-name = "jobscope"
 python-source = "src"
 manifest-path = "jobscope-agent/Cargo.toml"
 
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
 
 

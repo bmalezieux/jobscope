@@ -1,8 +1,42 @@
-use sysinfo::System;
+use sysinfo::{System, Pid, ProcessRefreshKind, ProcessesToUpdate};
 use nvml_wrapper::Nvml;
 use nvml_wrapper::enums::device::UsedGpuMemory;
 use std::collections::HashMap;
-use crate::metrics::{ProcessesSnapshot, ProcessInfo, Pid, GPUIndex, CPUIndex};
+use std::fs;
+use std::os::unix::fs::MetadataExt;
+use crate::metrics::{ProcessesSnapshot, ProcessInfo, GPUIndex, CPUIndex};
+
+pub fn refresh_user_processes(system: &mut System) {
+    let my_uid = fs::metadata("/proc/self").map(|m| m.uid()).unwrap_or(0);
+    let mut pids = Vec::new();
+
+    if let Ok(entries) = fs::read_dir("/proc") {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() { continue; }
+            
+            if let Some(file_name) = path.file_name().and_then(|s| s.to_str()) {
+                if let Ok(pid_val) = file_name.parse::<u32>() {
+                    // Check owner
+                    if let Ok(metadata) = fs::metadata(&path) {
+                        if metadata.uid() == my_uid {
+                            pids.push(Pid::from_u32(pid_val));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Also include existing PIDs to ensure they are checked (and removed if dead)
+    for pid in system.processes().keys() {
+        if !pids.contains(pid) {
+            pids.push(*pid);
+        }
+    }
+    
+    system.refresh_processes_specifics(ProcessesToUpdate::Some(&pids), true, ProcessRefreshKind::everything());
+}
 
 /// Takes a snapshot of all running processes with their CPU and GPU usage
 pub fn take_processes_snapshot(system: &System, nvml: Option<&Nvml>) -> ProcessesSnapshot {
@@ -13,13 +47,6 @@ pub fn take_processes_snapshot(system: &System, nvml: Option<&Nvml>) -> Processe
         HashMap::new()
     };
     
-    // Get the current user's UID to filter processes
-    let current_uid = sysinfo::get_current_pid()
-        .ok()
-        .and_then(|pid| system.process(pid))
-        .and_then(|proc| proc.user_id())
-        .cloned();
-    
     // Get total CPU count to generate CPU indexes for active processes
     let cpu_count = system.cpus().len() as CPUIndex;
     
@@ -27,21 +54,12 @@ pub fn take_processes_snapshot(system: &System, nvml: Option<&Nvml>) -> Processe
     let processes: Vec<ProcessInfo> = system
         .processes()
         .iter()
-        .filter(|(_, process)| {
-            // Only include processes owned by the current user
-            if let Some(ref uid) = current_uid {
-                process.user_id() == Some(uid)
-            } else {
-                // If we can't determine the current user, include all processes
-                true
-            }
-        })
         .map(|(pid, process)| {
-            let pid_value = pid.as_u32() as Pid;
+            let pid_value = pid.as_u32() as crate::metrics::Pid;
             
             // Get GPU info for this process if it exists
             let (gpu_usage_percent, gpu_memory_bytes, gpus_indexes) = 
-                gpu_usage_map.get(&pid_value)
+                gpu_usage_map.get(&(pid_value as u32))
                     .map(|gpu_info| (gpu_info.0, gpu_info.1, gpu_info.2.clone()))
                     .unwrap_or((0.0, 0, Vec::new()));
             
@@ -71,9 +89,9 @@ pub fn take_processes_snapshot(system: &System, nvml: Option<&Nvml>) -> Processe
 }
 
 /// Collects GPU usage information for all processes
-/// Returns: HashMap<Pid, (gpu_usage_percent, gpu_memory_bytes, Vec<GPUIndex>)>
-fn _collect_gpu_usage(nvml: &Nvml) -> HashMap<Pid, (f32, u64, Vec<GPUIndex>)> {
-    let mut gpu_usage: HashMap<Pid, (f32, u64, Vec<GPUIndex>)> = HashMap::new();
+/// Returns: HashMap<u32, (gpu_usage_percent, gpu_memory_bytes, Vec<GPUIndex>)>
+fn _collect_gpu_usage(nvml: &Nvml) -> HashMap<u32, (f32, u64, Vec<GPUIndex>)> {
+    let mut gpu_usage: HashMap<u32, (f32, u64, Vec<GPUIndex>)> = HashMap::new();
     let mut gpu_utilizations: HashMap<GPUIndex, f32> = HashMap::new();
     let mut gpu_total_memory: HashMap<GPUIndex, u64> = HashMap::new();
     
@@ -135,7 +153,7 @@ fn _collect_gpu_usage(nvml: &Nvml) -> HashMap<Pid, (f32, u64, Vec<GPUIndex>)> {
         };
         
         for proc_info in compute_processes {
-            let pid = proc_info.pid as Pid;
+            let pid = proc_info.pid;
             let memory = match proc_info.used_gpu_memory {
                 UsedGpuMemory::Used(bytes) => bytes,
                 UsedGpuMemory::Unavailable => 0,
@@ -166,7 +184,7 @@ fn _collect_gpu_usage(nvml: &Nvml) -> HashMap<Pid, (f32, u64, Vec<GPUIndex>)> {
         };
         
         for proc_info in graphics_processes {
-            let pid = proc_info.pid as Pid;
+            let pid = proc_info.pid;
             let memory = match proc_info.used_gpu_memory {
                 UsedGpuMemory::Used(bytes) => bytes,
                 UsedGpuMemory::Unavailable => 0,
