@@ -60,6 +60,9 @@ jobscope-*.data/
 .coverage
 htmlcov/
 .tox/
+tests/integration/.artifacts/
+tests/integration/docker/apt-sources/*
+!tests/integration/docker/apt-sources/.gitkeep
 
 # OS
 .DS_Store

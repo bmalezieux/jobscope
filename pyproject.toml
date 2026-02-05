@@ -35,4 +35,9 @@ dev = [
 profile = "black"
 line_length = 88
 
+[tool.pytest.ini_options]
+addopts = "-ra"
+markers = [
+    "slurm: requires the local Slurm docker cluster",
+]
 

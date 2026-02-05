@@ -55,6 +55,13 @@ def main() -> None:
         help="Run without TUI (useful for background logging)",
     )
 
+    parser.add_argument(
+        "--summary",
+        type=str,
+        default=None,
+        help="Write a JSON summary of snapshots to this path when exiting",
+    )
+
     # Demo options
     parser.add_argument(
         "--demo", action="store_true", help="Run in demo mode with simulated data"
@@ -144,6 +151,19 @@ def main() -> None:
 
         if agent_process:
             cleanup_agents(agent_process, args.jobid)
+
+        if args.summary:
+            from .scope.get_data import write_snapshots_summary
+
+            summary_path = Path(args.summary)
+            if not summary_path.is_absolute():
+                summary_path = Path.cwd() / summary_path
+
+            try:
+                write_snapshots_summary(output_dir, summary_path)
+                print(f"Wrote summary to: {summary_path}")
+            except Exception as e:
+                print(f"Warning: Could not write summary: {e}")
 
         # Clean up snapshot directory unless --keep-snapshots is set
         if not args.keep_snapshots:
