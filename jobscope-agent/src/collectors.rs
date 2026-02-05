@@ -8,12 +8,14 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use crate::metrics::Snapshot;
+use crate::mode::AgentMode;
 
 
 pub fn take_global_snapshot(
     system: &System,
     nvml: Option<&Nvml>,
     output_folder: &str,
+    mode: AgentMode,
 ) -> Result<String, Box<dyn std::error::Error>> {
     // Create output folder if it doesn't exist
     fs::create_dir_all(output_folder)?;
@@ -24,7 +26,7 @@ pub fn take_global_snapshot(
         .as_secs() as i64;
 
     // Collect snapshots from all subsystems
-    let cpus_snapshot = cpu::take_cpus_snapshot(system);
+    let cpus_snapshot = cpu::take_cpus_snapshot(system, mode);
     let gpus_snapshot = gpu::take_gpus_snapshot(nvml);
     let processes_snapshot = process::take_processes_snapshot(system, nvml);
 

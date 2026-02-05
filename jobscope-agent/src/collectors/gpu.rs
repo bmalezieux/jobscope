@@ -48,6 +48,7 @@ fn _collect_gpu_info(nvml: &Nvml, index: GPUIndex) -> Option<GPUInfo> {
         memory_load: MemoryLoad {
             used_bytes: memory_info.used,
             total_bytes: memory_info.total,
+            max_used_bytes: None,
         },
     })
 }

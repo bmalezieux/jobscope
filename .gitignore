@@ -49,6 +49,9 @@ target/
 **/*.rs.bk
 *.pdb
 
+# Build artifacts
+jobscope-*.data/
+
 # Maturin
 *.whl
 
@@ -57,6 +60,9 @@ target/
 .coverage
 htmlcov/
 .tox/
+tests/integration/.artifacts/
+tests/integration/docker/apt-sources/*
+!tests/integration/docker/apt-sources/.gitkeep
 
 # OS
 .DS_Store
@@ -64,5 +70,10 @@ Thumbs.db
 
 # Project specific
 *.parquet
-jobscope_snapshots_*/
+.jobscope_snapshots
 jobscope.egg-info/
+
+# Jean Zay specific
+tests/integration/test_jeanzay.py
+tests/integration/jeanzay_config.yaml
+.rsyncignore
