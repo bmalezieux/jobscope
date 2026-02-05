@@ -3,9 +3,16 @@ import time
 from multiprocessing import Process
 from pathlib import Path
 
-from ..scope.get_data import (CPUInfo, CPUsSnapshot, GPUInfo, GPUsSnapshot,
-                              MemoryLoad, ProcessesSnapshot, ProcessInfo,
-                              Snapshot)
+from ..scope.get_data import (
+    CPUInfo,
+    CPUsSnapshot,
+    GPUInfo,
+    GPUsSnapshot,
+    MemoryLoad,
+    ProcessesSnapshot,
+    ProcessInfo,
+    Snapshot,
+)
 
 
 def run_demo_agent_loop(

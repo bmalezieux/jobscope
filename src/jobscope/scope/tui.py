@@ -5,8 +5,7 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import Container, Vertical, VerticalScroll
 from textual.screen import Screen
-from textual.widgets import (DataTable, Footer, Header, Label, ProgressBar,
-                             Static)
+from textual.widgets import DataTable, Footer, Header, Label, ProgressBar, Static
 
 from .get_data import Snapshot, get_latest_snapshots_by_node
 
