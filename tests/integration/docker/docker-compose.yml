@@ -1,12 +1,4 @@
-x-slurm-image: &slurm-image jobscope/slurm-test:${SLURM_VERSION:-25.05.3}
-x-slurm-build: &slurm-build
-  context: ../..
-  dockerfile: tests/integration/docker/Dockerfile.slurm-test
-  args:
-    SLURM_BASE_IMAGE: ${SLURM_IMAGE_REPO:-ghcr.io/bmalezieux/slurm-docker-cluster}:${SLURM_VERSION:-25.05.3}
-    HTTP_PROXY: ${HTTP_PROXY-}
-    HTTPS_PROXY: ${HTTPS_PROXY-}
-    NO_PROXY: ${NO_PROXY-}
+x-slurm-image: &slurm-image ${SLURM_IMAGE_REPO:-ghcr.io/bmalezieux/slurm-docker-cluster}:${SLURM_VERSION:-25.05.3}
 x-slurm-env: &slurm-env
   HTTP_PROXY: ${HTTP_PROXY-}
   HTTPS_PROXY: ${HTTPS_PROXY-}
@@ -35,7 +27,6 @@ services:
 
   slurmdbd:
     image: *slurm-image
-    build: *slurm-build
     command: ["slurmdbd"]
     container_name: slurm-docker-cluster-slurmdbd
     hostname: slurmdbd
@@ -63,7 +54,6 @@ services:
 
   slurmctld:
     image: *slurm-image
-    build: *slurm-build
     command: ["slurmctld"]
     container_name: slurm-docker-cluster-slurmctld
     hostname: slurmctld
@@ -93,7 +83,6 @@ services:
 
   slurmrestd:
     image: *slurm-image
-    build: *slurm-build
     command: ["slurmrestd"]
     container_name: slurm-docker-cluster-slurmrestd
     hostname: slurmrestd
@@ -122,7 +111,6 @@ services:
 
   c1:
     image: *slurm-image
-    build: *slurm-build
     command: ["slurmd"]
     container_name: slurm-docker-cluster-c1
     hostname: c1
@@ -152,7 +140,6 @@ services:
 
   c2:
     image: *slurm-image
-    build: *slurm-build
     command: ["slurmd"]
     container_name: slurm-docker-cluster-c2
     hostname: c2

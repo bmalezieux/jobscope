@@ -12,7 +12,6 @@ fi
 
 PROJECT_NAME="${INTEGRATION_COMPOSE_PROJECT:-jobscope-integration}"
 COMPOSE=( docker compose --project-name "${PROJECT_NAME}" --project-directory "${INTEGRATION_DIR}" "${COMPOSE_FILES[@]}" )
-IMAGE_TAG="jobscope/slurm-test:${SLURM_VERSION:-25.05.3}"
 BASE_IMAGE="${SLURM_IMAGE_REPO:-ghcr.io/bmalezieux/slurm-docker-cluster}:${SLURM_VERSION:-25.05.3}"
 SLURM_CTL_CONTAINER="slurm-docker-cluster-slurmctld"
 
@@ -21,7 +20,7 @@ usage() {
 Usage: tests/integration/scripts/cluster.sh <command> [options]
 
 Commands:
-  build           Build the Slurm test image
+  build           Pull the base Slurm image
   start           Build (default), start the cluster, and install jobscope
   install         Install jobscope inside slurmctld
   status          Show cluster status
@@ -30,12 +29,11 @@ Commands:
   down            Stop and remove volumes
 
 Options (for start/build):
-  --no-build      Skip image build (start only)
+  --no-build      Skip image pull (start only)
   --no-install    Skip jobscope install
   --no-wait       Skip readiness wait
-  --pull          Always pull base image during build
-  --no-cache      Disable build cache
-  --build-network Set docker build network (e.g. host)
+  --pull          Always pull base image before start
+  --build-network Ignored (kept for backward compatibility)
 
 Environment:
   SLURM_IMAGE_REPO, SLURM_VERSION  Override base image
@@ -46,30 +44,11 @@ EOF
 }
 
 build_image() {
-    local build_network="${1:-}"
-    shift || true
-    local extra_args=()
-
-    for arg in "$@"; do
-        case "${arg}" in
-            --pull) extra_args+=(--pull) ;;
-            --no-cache) extra_args+=(--no-cache) ;;
-        esac
-    done
-
-    if [[ -n "${build_network}" ]]; then
-        extra_args+=(--network "${build_network}")
+    local do_pull="${1:-0}"
+    if [[ "${do_pull}" -eq 1 ]]; then
+        echo "Pulling base image ${BASE_IMAGE}..."
+        docker pull "${BASE_IMAGE}"
     fi
-
-    docker build \
-        -f "${INTEGRATION_DIR}/docker/Dockerfile.slurm-test" \
-        -t "${IMAGE_TAG}" \
-        --build-arg "SLURM_BASE_IMAGE=${BASE_IMAGE}" \
-        --build-arg "HTTP_PROXY=${HTTP_PROXY-}" \
-        --build-arg "HTTPS_PROXY=${HTTPS_PROXY-}" \
-        --build-arg "NO_PROXY=${NO_PROXY-}" \
-        "${extra_args[@]}" \
-        "${ROOT_DIR}"
 }
 
 ensure_agent() {
@@ -97,15 +76,52 @@ install_jobscope() {
     ensure_agent
     echo "Installing jobscope in slurmctld..."
     "${COMPOSE[@]}" exec -T slurmctld bash -lc '
-        if [ ! -x /root/jobscope-venv/bin/python ]; then
-            uv venv /root/jobscope-venv --python 3.12
+        set -euo pipefail
+        export PATH="/usr/local/bin:/root/.local/bin:${PATH}"
+
+        if ! command -v curl >/dev/null; then
+            if command -v apt-get >/dev/null; then
+                apt-get update
+                apt-get install -y --no-install-recommends curl ca-certificates
+                rm -rf /var/lib/apt/lists/*
+            elif command -v dnf >/dev/null; then
+                dnf install -y --allowerasing curl ca-certificates
+                dnf clean all
+            elif command -v yum >/dev/null; then
+                yum install -y curl ca-certificates
+                yum clean all
+            else
+                echo "No supported package manager found to install curl/ca-certificates" >&2
+                exit 1
+            fi
         fi
+
+        if ! command -v uv >/dev/null; then
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+        fi
+
+        if ! command -v cargo >/dev/null; then
+            if command -v apt-get >/dev/null; then
+                apt-get update
+                apt-get install -y --no-install-recommends cargo rustc
+                rm -rf /var/lib/apt/lists/*
+            elif command -v dnf >/dev/null; then
+                dnf install -y --allowerasing cargo rust
+                dnf clean all
+            elif command -v yum >/dev/null; then
+                yum install -y cargo rust
+                yum clean all
+            else
+                echo "No supported package manager found to install rust toolchain" >&2
+                exit 1
+            fi
+        fi
+
+        uv python install 3.12
+        uv venv /root/jobscope-venv --python 3.12
         . /root/jobscope-venv/bin/activate
-        if [ -f /root/jobscope-venv/.jobscope_deps_installed ]; then
-            uv pip install -e /jobscope --no-deps
-        else
-            uv pip install -e /jobscope
-        fi
+        uv pip install --no-cache-dir "maturin>=1.0,<2.0" puccinialin
+        uv pip install -e /jobscope --no-build-isolation
     '
 }
 
@@ -114,12 +130,11 @@ shift || true
 
 case "${cmd}" in
     build)
-        build_args=()
         build_network=""
+        do_pull=0
         while [[ $# -gt 0 ]]; do
             case "$1" in
-                --pull) build_args+=(--pull) ;;
-                --no-cache) build_args+=(--no-cache) ;;
+                --pull) do_pull=1 ;;
                 --build-network)
                     shift
                     build_network="${1:-}"
@@ -132,21 +147,23 @@ case "${cmd}" in
             esac
             shift
         done
-        build_image "${build_network}" "${build_args[@]}"
+        if [[ -n "${build_network}" ]]; then
+            echo "Warning: --build-network is ignored (no image build step)." >&2
+        fi
+        build_image "${do_pull}"
         ;;
     start)
         do_build=1
         do_install=1
         do_wait=1
-        build_args=()
         build_network=""
+        do_pull=0
         while [[ $# -gt 0 ]]; do
             case "$1" in
                 --no-build) do_build=0 ;;
                 --no-install) do_install=0 ;;
                 --no-wait) do_wait=0 ;;
-                --pull) build_args+=(--pull) ;;
-                --no-cache) build_args+=(--no-cache) ;;
+                --pull) do_pull=1 ;;
                 --build-network)
                     shift
                     build_network="${1:-}"
@@ -161,7 +178,10 @@ case "${cmd}" in
         done
         mkdir -p "${INTEGRATION_DIR}/.artifacts"
         if [[ "${do_build}" -eq 1 ]]; then
-            build_image "${build_network}" "${build_args[@]}"
+            if [[ -n "${build_network}" ]]; then
+                echo "Warning: --build-network is ignored (no image build step)." >&2
+            fi
+            build_image "${do_pull}"
         fi
         "${COMPOSE[@]}" up -d --no-build
         if [[ "${do_wait}" -eq 1 ]]; then

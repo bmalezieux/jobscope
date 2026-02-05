@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["maturin>=1.0,<2.0"]
+requires = ["maturin>=1.0,<2.0", "puccinialin"]
 build-backend = "maturin"
 
 [tool.maturin]
@@ -40,4 +40,3 @@ addopts = "-ra"
 markers = [
     "slurm: requires the local Slurm docker cluster",
 ]
-
