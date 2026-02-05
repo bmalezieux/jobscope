@@ -4,7 +4,7 @@ A system resource monitoring tool for compute clusters that tracks CPU, GPU, and
 
 ## Description
 
-JobScope is a hybrid Python/Rust application designed for monitoring computational workloads both locally and on SLURM clusters. It collects metrics on CPU usage, GPU utilization (NVIDIA), memory consumption, and process-level statistics, displaying them in an interactive terminal interface or exporting them to Parquet files for analysis.
+JobScope is a hybrid Python/Rust application designed for monitoring computational workloads both locally and on SLURM clusters. It collects metrics on CPU usage, GPU utilization (NVIDIA), memory consumption, and process-level statistics, displaying them in an interactive terminal interface or exporting a JSON summary for analysis.
 
 The monitoring agent is written in Rust for performance and low overhead, while the CLI and TUI are implemented in Python for ease of use.
 
@@ -73,8 +73,8 @@ jobscope --period 1.0
 # Run once and exit (no continuous monitoring)
 jobscope --once
 
-# Export metrics to Parquet file
-jobscope --parquet ./metrics.parquet
+# Write a JSON summary on exit
+jobscope --summary ./metrics-summary.json
 ```
 
 The TUI displays:
@@ -84,7 +84,7 @@ The TUI displays:
 - **Process information** (top consumers by CPU/memory)
 - Real-time updates at the specified refresh period
 
-Press `Ctrl+q` to stop monitoring and clean up.
+Press `q` to quit and clean up.
 
 ### SLURM Cluster Monitoring
 
@@ -94,8 +94,8 @@ Monitor a running SLURM job by attaching to it with its job ID:
 # Monitor a specific SLURM job
 jobscope --jobid 123456
 
-# Monitor with custom period and export to Parquet
-jobscope --jobid 123456 --period 5.0 --parquet ./job_123456_metrics.parquet
+# Monitor with custom period and write a JSON summary on exit
+jobscope --jobid 123456 --period 5.0 --summary ./job_123456_summary.json
 ```
 
 **How it works:**
@@ -114,10 +114,10 @@ sbatch my_training_script.sh
 # Output: Submitted batch job 789012
 
 # Monitor the job in real-time
-jobscope --jobid 789012 --parquet ./training_metrics.parquet
+jobscope --jobid 789012 --summary ./training_summary.json
 
-# After the job completes, analyze the metrics
-# The Parquet file contains timestamped CPU, GPU, and process data
+# After the job completes, analyze the summary JSON
+# The summary includes per-node snapshots with CPU, GPU, and memory data
 ```
 
 ## Development

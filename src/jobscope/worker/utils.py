@@ -10,15 +10,12 @@ def find_worker_binary() -> str:
     We only need this on the login/head node. The *absolute* path we get
     will be passed to srun, so the compute nodes don't need Python.
     """
-    # 1. Check development path first
-    # We are in src/jobscope/worker/utils.py
-    # root is 3 levels up from src/jobscope/worker
+    # Prefer local release build when developing.
     root = Path(__file__).resolve().parent.parent.parent.parent
     dev_path = root / "jobscope-agent" / "target" / "release" / "jobscope-agent"
     if dev_path.exists():
         return str(dev_path)
 
-    # 2. Check PATH
     worker = shutil.which("jobscope-agent")
     if worker is None:
         raise RuntimeError(
@@ -33,8 +30,6 @@ def kill_zombie_steps(jobid: str) -> None:
     Kills any lingering jobscope-agent steps for the given job ID.
     """
     try:
-        # Find steps running jobscope-agent
-        # Format: step_id command
         cmd = ["squeue", "--job", str(jobid), "--steps", "--noheader", "--format=%i %o"]
         result = subprocess.run(cmd, capture_output=True, text=True)
 
@@ -61,7 +56,6 @@ def cleanup_agents(
     if agent_process:
         print("Stopping agent...")
 
-        # Check if it's a multiprocessing.Process (from demo mode)
         if hasattr(agent_process, "join"):
             agent_process.terminate()
             agent_process.join(timeout=3)
@@ -72,9 +66,6 @@ def cleanup_agents(
             print("Agent stopped.")
             return
 
-        # Assume subprocess.Popen
-        # Terminate the process (local agent or srun launcher)
-        # For srun, this will send signals to the remote processes it spawned
         agent_process.terminate()
         try:
             agent_process.wait(timeout=3)

@@ -8,7 +8,7 @@ from .slurm_worker import run_slurm_worker
 def run_agent(
     output_dir: Path,
     period: float,
-    jobid: int | None = None,
+    jobid: str | None = None,
     once: bool = False,
     demo: bool = False,
     demo_nodes: int = 1,

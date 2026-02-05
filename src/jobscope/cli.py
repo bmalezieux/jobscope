@@ -136,9 +136,7 @@ def main() -> None:
                 time.sleep(1)
         else:
             # Start the monitoring scope (TUI)
-            start_monitoring(
-                output_dir=str(output_dir), period=args.period, once=args.once
-            )
+            start_monitoring(output_dir=str(output_dir), period=args.period)
 
     except KeyboardInterrupt:
         pass

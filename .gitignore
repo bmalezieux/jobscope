@@ -69,7 +69,6 @@ tests/integration/docker/apt-sources/*
 Thumbs.db
 
 # Project specific
-*.parquet
 .jobscope_snapshots
 jobscope.egg-info/
 

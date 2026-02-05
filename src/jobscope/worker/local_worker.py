@@ -6,7 +6,7 @@ from pathlib import Path
 from .utils import find_worker_binary
 
 
-def run_local_worker(output_dir: Path, period: int, once: bool = False):
+def run_local_worker(output_dir: Path, period: float, once: bool = False):
     try:
         agent_path = find_worker_binary()
         print(f"Starting worker: {agent_path}")

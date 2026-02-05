@@ -128,10 +128,6 @@ echo "Running on $(hostname) with $(cat /proc/self/status | grep Cpus_allowed_li
 sleep 30
 """
 
-    # GPU requests in Slurm often use --gpus-per-node or just --gpus
-    # Our mocked cluster might not strictly enforce GPU availability if hardware is missing,
-    # or it might reject the job.
-    # We will simulate GPU request if asked, but verify if execution is possible.
     gpu_arg = f"{gpus}" if gpus > 0 else None
 
     try:
