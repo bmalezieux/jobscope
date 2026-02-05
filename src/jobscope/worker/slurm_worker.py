@@ -1,3 +1,5 @@
+import os
+import re
 import subprocess
 import sys
 import time
@@ -10,6 +12,85 @@ from .utils import find_worker_binary, kill_zombie_steps
 console = Console()
 
 DEFAULT_SLEEP = 2  # seconds
+
+
+def _first_int(value: str) -> int | None:
+    match = re.search(r"\d+", value or "")
+    if not match:
+        return None
+    return int(match.group(0))
+
+
+def _parse_mem_mb(value: str) -> int | None:
+    raw = (value or "").strip()
+    if not raw or raw == "0":
+        return None
+    match = re.match(r"^(?P<num>\d+(?:\.\d+)?)(?P<unit>[KMGTP]?)$", raw, re.IGNORECASE)
+    if not match:
+        return None
+    num = float(match.group("num"))
+    unit = match.group("unit").upper()
+    factor = {"": 1.0, "K": 1.0 / 1024.0, "M": 1.0, "G": 1024.0, "T": 1024.0 * 1024.0, "P": 1024.0 * 1024.0 * 1024.0}
+    return int(num * factor.get(unit, 1.0))
+
+
+def _calc_cpus_per_node(num_cpus: int | None, num_nodes: int | None) -> int | None:
+    if not num_cpus or not num_nodes:
+        return None
+    return (num_cpus + num_nodes - 1) // num_nodes
+
+
+def _parse_req_mem_mb(req_mem: str, cpus_per_node: int | None, num_cpus: int | None, num_nodes: int | None) -> int | None:
+    raw = (req_mem or "").strip()
+    if not raw or raw == "0":
+        return None
+    per = None
+    if raw[-1].lower() in ("c", "n"):
+        per = raw[-1].lower()
+        raw = raw[:-1]
+    value_mb = _parse_mem_mb(raw)
+    if value_mb is None:
+        return None
+    if per in (None, "n"):
+        return value_mb
+    if per == "c":
+        cpus = cpus_per_node or _calc_cpus_per_node(num_cpus, num_nodes)
+        if cpus:
+            return value_mb * cpus
+    return None
+
+
+def _get_job_memory_total_mb(jobid: str, cpus_per_node: int | None) -> int | None:
+    cmd = ["scontrol", "show", "job", "-o", str(jobid)]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+
+    fields = {}
+    for token in result.stdout.strip().split():
+        if "=" in token:
+            key, value = token.split("=", 1)
+            fields[key] = value
+
+    num_cpus = _first_int(fields.get("NumCPUs", ""))
+    num_nodes = _first_int(fields.get("NumNodes", ""))
+
+    req_mem = fields.get("ReqMem", "")
+    total_mb = _parse_req_mem_mb(req_mem, cpus_per_node, num_cpus, num_nodes)
+    if total_mb:
+        return total_mb
+
+    mem_node = _parse_mem_mb(fields.get("MinMemoryNode", ""))
+    if mem_node:
+        return mem_node
+
+    mem_cpu = _parse_mem_mb(fields.get("MinMemoryCPU", ""))
+    if mem_cpu:
+        cpus = cpus_per_node or _calc_cpus_per_node(num_cpus, num_nodes)
+        if cpus:
+            return mem_cpu * cpus
+
+    return None
 
 
 def run_slurm_worker(output_dir: Path, period: int, jobid: str):
@@ -76,17 +157,23 @@ def run_slurm_worker(output_dir: Path, period: int, jobid: str):
         cpus_cmd = ["squeue", "--job", str(jobid), "--noheader", "--format=%c"]
         res_cpus = subprocess.run(cpus_cmd, capture_output=True, text=True)
         cpus_per_node = None
+        cpus_per_node_int = None
         if res_cpus.returncode == 0 and res_cpus.stdout.strip():
              cpus_out = res_cpus.stdout.strip()
              # If multiple lines or anything, take first
              cpus_per_node = cpus_out.splitlines()[0].strip()
+             cpus_per_node_int = _first_int(cpus_per_node)
              console.print(f"CPUs per node: {cpus_per_node}")
         
         # Cleanup any previous agents that might be stuck
         kill_zombie_steps(jobid)
 
         agent_path = find_worker_binary()
-        
+
+        mem_total_mb = _get_job_memory_total_mb(jobid, cpus_per_node_int)
+        if mem_total_mb:
+            console.print(f"Allocated memory per node: {mem_total_mb} MB")
+
         # We want to run one agent per node allocated to the job
         # srun --jobid <jobid> --nodes=<N> --ntasks-per-node=1 --cpus-per-task=<C> <agent> ...
         
@@ -102,6 +189,9 @@ def run_slurm_worker(output_dir: Path, period: int, jobid: str):
             
         if cpus_per_node:
             cmd.append(f"--cpus-per-task={cpus_per_node}")
+
+        if mem_total_mb:
+            cmd.append(f"--export=ALL,JOBSCOPE_MEM_TOTAL_MB={mem_total_mb}")
             
         cmd.extend([
             agent_path,
@@ -110,12 +200,17 @@ def run_slurm_worker(output_dir: Path, period: int, jobid: str):
             "--mode", "slurm",
             "--continuous"
         ])
+
+        env = os.environ.copy()
+        if mem_total_mb:
+            env["JOBSCOPE_MEM_TOTAL_MB"] = str(mem_total_mb)
         
         # Start srun in background. It will launch agents on compute nodes.
         srun_process = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            env=env
         )
         
         console.print(f"[green]Slurm worker attached. srun PID: {srun_process.pid}[/green]")

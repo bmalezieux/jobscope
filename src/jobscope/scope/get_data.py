@@ -143,36 +143,36 @@ def get_latest_snapshots_by_node(output_dir: Path) -> dict[str, Snapshot]:
     Returns:
         Dictionary mapping hostname to latest Snapshot object
     """
-    snapshots = {}
-    
+    latest_files: dict[str, tuple[int, Path]] = {}
+
     # Pattern: snapshot_{hostname}_{timestamp}.json
     # Or legacy: snapshot_{timestamp}.json (treat as "unknown")
-    
     for file_path in output_dir.glob("snapshot_*.json"):
         try:
             parts = file_path.stem.split("_")
             if len(parts) >= 3:
-                # snapshot, hostname, timestamp
                 hostname = "_".join(parts[1:-1])
                 timestamp = int(parts[-1])
             elif len(parts) == 2:
-                # snapshot, timestamp (legacy)
                 hostname = "unknown"
                 timestamp = int(parts[-1])
             else:
                 continue
-                
-            # We only parse the file if it's newer than what we have
-            if hostname not in snapshots or timestamp > snapshots[hostname][0]:
-                try:
-                    snap = parse_snapshot(file_path)
-                    snapshots[hostname] = (timestamp, snap)
-                except Exception:
-                    continue
         except ValueError:
             continue
-            
-    return {k: v[1] for k, v in snapshots.items()}
+
+        current = latest_files.get(hostname)
+        if current is None or timestamp > current[0]:
+            latest_files[hostname] = (timestamp, file_path)
+
+    snapshots: dict[str, Snapshot] = {}
+    for hostname, (_ts, file_path) in latest_files.items():
+        try:
+            snapshots[hostname] = parse_snapshot(file_path)
+        except Exception:
+            continue
+
+    return snapshots
 
 def export_to_parquet(output_dir: Path, parquet_path: Path) -> None:
     """

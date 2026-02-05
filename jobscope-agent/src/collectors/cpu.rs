@@ -59,6 +59,34 @@ fn read_u64(path: &str) -> Option<u64> {
     fs::read_to_string(path).ok()?.trim().parse::<u64>().ok()
 }
 
+fn read_env_u64(var: &str) -> Option<u64> {
+    let value = std::env::var(var).ok()?;
+    let parsed = value.trim().parse::<u64>().ok()?;
+    if parsed == 0 {
+        None
+    } else {
+        Some(parsed)
+    }
+}
+
+fn mb_to_bytes(mb: u64) -> u64 {
+    mb.saturating_mul(1024).saturating_mul(1024)
+}
+
+fn read_slurm_memory_total_bytes(allocated_cpus: Option<usize>) -> Option<u64> {
+    if let Some(mem_total_mb) = read_env_u64("JOBSCOPE_MEM_TOTAL_MB") {
+        return Some(mb_to_bytes(mem_total_mb));
+    }
+    if let Some(mem_per_cpu_mb) = read_env_u64("SLURM_MEM_PER_CPU") {
+        let cpus = allocated_cpus?;
+        return Some(mb_to_bytes(mem_per_cpu_mb.saturating_mul(cpus as u64)));
+    }
+    if let Some(mem_per_node_mb) = read_env_u64("SLURM_MEM_PER_NODE") {
+        return Some(mb_to_bytes(mem_per_node_mb));
+    }
+    None
+}
+
 fn read_cgroup_memory_limit_bytes() -> Option<u64> {
     let (path, is_v2) = get_cgroup_memory_path()?;
 
@@ -93,6 +121,10 @@ fn read_cgroup_memory_usage_bytes() -> Option<(u64, Option<u64>)> {
     Some((current, peak))
 }
 
+fn sum_process_memory_bytes(system: &System) -> u64 {
+    system.processes().values().map(|p| p.memory()).sum()
+}
+
 pub fn take_cpus_snapshot(system: &System, mode: AgentMode) -> CPUsSnapshot {
     let (cpu_indices, fallback_cpu_count) = match mode {
         AgentMode::Local => (None, None),
@@ -102,6 +134,7 @@ pub fn take_cpus_snapshot(system: &System, mode: AgentMode) -> CPUsSnapshot {
             (cpuset, env_count)
         }
     };
+    let allocated_cpus = cpu_indices.as_ref().map(|v| v.len()).or(fallback_cpu_count);
 
     let mut cpus_info: Vec<CPUInfo> = Vec::new();
     for (index, cpu) in system.cpus().iter().enumerate() {
@@ -129,8 +162,21 @@ pub fn take_cpus_snapshot(system: &System, mode: AgentMode) -> CPUsSnapshot {
             max_used_bytes: None,
         },
         AgentMode::Slurm => {
-            let total = read_cgroup_memory_limit_bytes().unwrap_or_else(|| system.total_memory());
-            let (used, peak) = read_cgroup_memory_usage_bytes().unwrap_or_else(|| (system.used_memory(), None));
+            let slurm_total = read_slurm_memory_total_bytes(allocated_cpus);
+            let cgroup_total = read_cgroup_memory_limit_bytes();
+            let total = match (slurm_total, cgroup_total) {
+                (Some(slurm), Some(cgroup)) => slurm.min(cgroup),
+                (Some(slurm), None) => slurm,
+                (None, Some(cgroup)) => cgroup,
+                (None, None) => system.total_memory(),
+            };
+            let (used_cgroup, peak) = read_cgroup_memory_usage_bytes().unwrap_or_else(|| (0, None));
+            let used_processes = sum_process_memory_bytes(system);
+            let mut used = used_cgroup.max(used_processes);
+            if used == 0 {
+                used = system.used_memory();
+            }
+            let used = used.min(total);
             MemoryLoad {
                 used_bytes: used,
                 total_bytes: total,

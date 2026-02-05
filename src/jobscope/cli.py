@@ -60,6 +60,31 @@ def main() -> None:
         help="Run without TUI (useful for background logging)"
     )
     
+    # Demo options
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Run in demo mode with simulated data"
+    )
+    parser.add_argument(
+        "--demo-nodes",
+        type=int,
+        default=4,
+        help="Number of nodes to simulate in demo mode"
+    )
+    parser.add_argument(
+        "--demo-cpus",
+        type=int,
+        default=32,
+        help="Number of CPUs per node in demo mode"
+    )
+    parser.add_argument(
+        "--demo-gpus",
+        type=int,
+        default=4,
+        help="Number of GPUs per node in demo mode"
+    )
+
     args = parser.parse_args()
 
     # Create snapshots directory with timestamped subdirectory
@@ -75,7 +100,16 @@ def main() -> None:
     print(f"Using snapshot directory: {output_dir}")
 
     # Spawn agent
-    agent_process = run_agent(output_dir, args.period, args.jobid, args.once)    
+    agent_process = run_agent(
+        output_dir, 
+        args.period, 
+        args.jobid, 
+        args.once,
+        demo=args.demo,
+        demo_nodes=args.demo_nodes,
+        demo_cpus=args.demo_cpus,
+        demo_gpus=args.demo_gpus
+    )    
 
     # Handle signals to ensure cleanup runs
     def signal_handler(sig, frame):

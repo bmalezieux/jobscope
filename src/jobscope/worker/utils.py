@@ -48,7 +48,7 @@ def kill_zombie_steps(jobid: str) -> None:
     except Exception as e:
         print(f"Error checking/killing zombie steps: {e}")
 
-def cleanup_agents(agent_process: subprocess.Popen, jobid: str | None = None) -> None:
+def cleanup_agents(agent_process: subprocess.Popen | object, jobid: str | None = None) -> None:
     """
     Terminates the agent process (local or srun).
     For Slurm jobs, we terminate the srun process which will signal its children.
@@ -57,6 +57,18 @@ def cleanup_agents(agent_process: subprocess.Popen, jobid: str | None = None) ->
     if agent_process:
         print("Stopping agent...")
         
+        # Check if it's a multiprocessing.Process (from demo mode)
+        if hasattr(agent_process, "join"):
+            agent_process.terminate()
+            agent_process.join(timeout=3)
+            if agent_process.is_alive():
+                print("Agent did not stop gracefully, force killing...")
+                agent_process.kill()
+                agent_process.join()
+            print("Agent stopped.")
+            return
+
+        # Assume subprocess.Popen
         # Terminate the process (local agent or srun launcher)
         # For srun, this will send signals to the remote processes it spawned
         agent_process.terminate()
