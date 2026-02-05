@@ -2,6 +2,7 @@
 """
 Jobscope CLI entry point wrapper.
 """
+
 from jobscope import main
 
 if __name__ == "__main__":

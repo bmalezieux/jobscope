@@ -11,8 +11,6 @@ dependencies = [
     "pydantic>=2.0.0",
     "rich>=13.0.0",
     "textual>=0.40.0",
-    "pandas>=2.0.0",
-    "pyarrow>=14.0.0",
 ]
 
 [build-system]
@@ -27,7 +25,10 @@ manifest-path = "jobscope-agent/Cargo.toml"
 
 [dependency-groups]
 dev = [
+    "black>=26.1.0",
+    "isort>=7.0.0",
     "pytest>=9.0.2",
+    "ruff>=0.15.0",
 ]
 
 

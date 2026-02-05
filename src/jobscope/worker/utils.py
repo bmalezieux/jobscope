@@ -27,6 +27,7 @@ def find_worker_binary() -> str:
         )
     return worker
 
+
 def kill_zombie_steps(jobid: str) -> None:
     """
     Kills any lingering jobscope-agent steps for the given job ID.
@@ -36,7 +37,7 @@ def kill_zombie_steps(jobid: str) -> None:
         # Format: step_id command
         cmd = ["squeue", "--job", str(jobid), "--steps", "--noheader", "--format=%i %o"]
         result = subprocess.run(cmd, capture_output=True, text=True)
-        
+
         if result.returncode == 0:
             for line in result.stdout.splitlines():
                 parts = line.strip().split(maxsplit=1)
@@ -48,7 +49,10 @@ def kill_zombie_steps(jobid: str) -> None:
     except Exception as e:
         print(f"Error checking/killing zombie steps: {e}")
 
-def cleanup_agents(agent_process: subprocess.Popen | object, jobid: str | None = None) -> None:
+
+def cleanup_agents(
+    agent_process: subprocess.Popen | object, jobid: str | None = None
+) -> None:
     """
     Terminates the agent process (local or srun).
     For Slurm jobs, we terminate the srun process which will signal its children.
@@ -56,7 +60,7 @@ def cleanup_agents(agent_process: subprocess.Popen | object, jobid: str | None =
     """
     if agent_process:
         print("Stopping agent...")
-        
+
         # Check if it's a multiprocessing.Process (from demo mode)
         if hasattr(agent_process, "join"):
             agent_process.terminate()
@@ -80,6 +84,6 @@ def cleanup_agents(agent_process: subprocess.Popen | object, jobid: str | None =
             agent_process.kill()
             agent_process.wait()
             print("Agent killed.")
-    
+
     if jobid:
         kill_zombie_steps(jobid)
