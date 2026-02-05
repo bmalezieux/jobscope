@@ -96,10 +96,17 @@ wait_for_cluster() {
 install_jobscope() {
     ensure_agent
     echo "Installing jobscope in slurmctld..."
-    "${COMPOSE[@]}" exec -T slurmctld bash -lc \
-        "uv venv /root/jobscope-venv --python 3.12 \
-        && source /root/jobscope-venv/bin/activate \
-        && uv pip install -e /jobscope"
+    "${COMPOSE[@]}" exec -T slurmctld bash -lc '
+        if [ ! -x /root/jobscope-venv/bin/python ]; then
+            uv venv /root/jobscope-venv --python 3.12
+        fi
+        . /root/jobscope-venv/bin/activate
+        if [ -f /root/jobscope-venv/.jobscope_deps_installed ]; then
+            uv pip install -e /jobscope --no-deps
+        else
+            uv pip install -e /jobscope
+        fi
+    '
 }
 
 cmd="${1:-}"

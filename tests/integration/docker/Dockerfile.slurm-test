@@ -50,3 +50,24 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 RUN mkdir -p "${UV_PYTHON_INSTALL_DIR}" "${UV_CACHE_DIR}" \
     && uv python install 3.12
+
+RUN uv venv /root/jobscope-venv --python 3.12
+
+COPY pyproject.toml uv.lock /tmp/jobscope/
+
+RUN /root/jobscope-venv/bin/python - <<'PY'
+import pathlib
+import subprocess
+import tomllib
+
+pyproject = pathlib.Path("/tmp/jobscope/pyproject.toml")
+data = tomllib.loads(pyproject.read_text())
+deps = data.get("project", {}).get("dependencies", [])
+if deps:
+    subprocess.run(
+        ["/root/jobscope-venv/bin/pip", "install", "--no-cache-dir", *deps],
+        check=True,
+    )
+PY
+
+RUN touch /root/jobscope-venv/.jobscope_deps_installed

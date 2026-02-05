@@ -1,6 +1,7 @@
 import json
 import subprocess
 import time
+
 import pytest
 
 pytestmark = pytest.mark.slurm
@@ -30,7 +31,9 @@ def submit_and_monitor(
         if gpu_config:
             cmd += f" --gpus={gpu_config}"
 
-        container_script_path = f"/jobscope/tests/integration/.artifacts/{script_path.name}"
+        container_script_path = (
+            f"/jobscope/tests/integration/.artifacts/{script_path.name}"
+        )
 
         cmd += f" {container_script_path}"
 
@@ -55,7 +58,9 @@ def submit_and_monitor(
         assert started, f"Job {job_id} did not start. Status: {state}"
 
         # Start monitoring
-        summary_file = f"/jobscope/tests/integration/.artifacts/slurm_summary_{job_id}.json"
+        summary_file = (
+            f"/jobscope/tests/integration/.artifacts/slurm_summary_{job_id}.json"
+        )
         monitor_cmd = [
             "docker",
             "exec",

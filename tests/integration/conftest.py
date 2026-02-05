@@ -25,7 +25,9 @@ def artifacts_dir() -> Path:
 @pytest.fixture(scope="session")
 def slurm_cluster(artifacts_dir: Path):
     if shutil.which("docker") is None:
-        pytest.skip("Docker is not available. Install Docker to run Slurm integration tests.")
+        pytest.skip(
+            "Docker is not available. Install Docker to run Slurm integration tests."
+        )
 
     res = _run(
         "docker ps --filter name=slurm-docker-cluster-slurmctld --format '{{.Status}}'",
@@ -40,7 +42,10 @@ def slurm_cluster(artifacts_dir: Path):
             "  uv run pytest -m slurm\n"
         )
 
-    if _run(f"docker exec {SLURM_CTL_CONTAINER} scontrol ping", check=False).returncode != 0:
+    if (
+        _run(f"docker exec {SLURM_CTL_CONTAINER} scontrol ping", check=False).returncode
+        != 0
+    ):
         pytest.skip(
             "Slurm controller not ready yet.\n"
             "Wait a moment or rerun:\n"
@@ -58,7 +63,9 @@ def slurm_cluster(artifacts_dir: Path):
             "  tests/integration/scripts/cluster.sh install"
         )
 
-    agent_path = WORKSPACE_DIR / "jobscope-agent" / "target" / "release" / "jobscope-agent"
+    agent_path = (
+        WORKSPACE_DIR / "jobscope-agent" / "target" / "release" / "jobscope-agent"
+    )
     if not agent_path.exists():
         pytest.skip(
             "jobscope-agent is not built on the host.\n"
