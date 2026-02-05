@@ -398,9 +398,7 @@ class ClusterView(Screen):
         current_keys = set(table.rows.keys())
 
         for hostname, snap in snapshots.items():
-            cpu_visual = make_cpu_squares(
-                snap.cpus_snapshot.cpus, width=20
-            )
+            cpu_visual = make_cpu_squares(snap.cpus_snapshot.cpus, width=20)
 
             mem = snap.cpus_snapshot.memory
             mem_str = f"{mem.used_gb:.1f}/{mem.total_gb:.1f}G"
