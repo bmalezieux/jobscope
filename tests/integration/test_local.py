@@ -9,7 +9,7 @@ def test_build_and_install():
     assert result.returncode == 0, f"Install failed: {result.stderr}"
 
     # Check if we can import it
-    cmd = [sys.executable, "-c", "import jobscope; print(jobscope.__file__)"]
+    cmd = [sys.executable, "-c", "import jobscope"]
     result = subprocess.run(cmd, capture_output=True, text=True)
     assert result.returncode == 0, f"Import failed: {result.stderr}"
 

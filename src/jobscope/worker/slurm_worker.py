@@ -5,11 +5,10 @@ import sys
 import time
 from pathlib import Path
 
-from rich.console import Console
-
+from ..logging import get_logger
 from .utils import find_worker_binary, kill_zombie_steps
 
-console = Console()
+logger = get_logger(__name__)
 
 DEFAULT_SLEEP = 2  # seconds
 
@@ -104,61 +103,54 @@ def _get_job_memory_total_mb(jobid: str, cpus_per_node: int | None) -> int | Non
 
 def run_slurm_worker(output_dir: Path, period: float, jobid: str):
     """
-    Checks the Slurm job status and starts the worker agent using srun if running.
+    Checks the Slurm job status and starts the worker worker using srun if running.
     """
     try:
         squeue_cmd = ["squeue", "--job", str(jobid), "--noheader", "--format=%t"]
 
-        with console.status(
-            f"[bold blue]Waiting for job {jobid}...", spinner="dots"
-        ) as status:
-            while True:
-                result = subprocess.run(squeue_cmd, capture_output=True, text=True)
+        logger.info("Waiting for job %s to start...", jobid)
+        while True:
+            result = subprocess.run(squeue_cmd, capture_output=True, text=True)
 
-                if result.returncode != 0:
-                    console.print(
-                        f"[red]Error checking job status for {jobid}. Is it valid/still running?[/red]"
-                    )
-                    sys.exit(1)
+            if result.returncode != 0:
+                logger.error(
+                    "Error checking job status for %s. Is it valid/still running?",
+                    jobid,
+                )
+                sys.exit(1)
 
-                state = result.stdout.strip()
+            state = result.stdout.strip()
 
-                if not state:
-                    console.print(f"[red]Job {jobid} not found in squeue.[/red]")
-                    sys.exit(1)
+            if not state:
+                logger.error("Job %s not found in squeue.", jobid)
+                sys.exit(1)
 
-                if state == "R":
-                    break
-                elif state == "PD":
-                    status.update(f"[bold yellow]Job {jobid} is pending...")
-                    time.sleep(DEFAULT_SLEEP)
-                    continue
-                elif state in [
-                    "CG",
-                    "F",
-                    "CD",
-                    "CA",
-                ]:
-                    console.print(
-                        f"[red]Job {jobid} is in state {state}. Cannot attach worker.[/red]"
-                    )
-                    sys.exit(1)
-                else:
-                    status.update(f"[bold blue]Job {jobid} is in state {state}...")
-                    time.sleep(DEFAULT_SLEEP)
+            if state == "R":
+                logger.info("Job %s detected running.", jobid)
+                break
+            if state in [
+                "CG",
+                "F",
+                "CD",
+                "CA",
+            ]:
+                logger.error(
+                    "Job %s is in state %s. Cannot attach worker.", jobid, state
+                )
+                sys.exit(1)
 
-        console.print(
-            f"[green]Job {jobid} is running. Starting worker agent...[/green]"
-        )
+            time.sleep(DEFAULT_SLEEP)
+
+        logger.info("Job %s is running. Starting worker ...", jobid)
 
         nodes_cmd = ["squeue", "--job", str(jobid), "--noheader", "--format=%D"]
         res_nodes = subprocess.run(nodes_cmd, capture_output=True, text=True)
         if res_nodes.returncode == 0 and res_nodes.stdout.strip():
             num_nodes = res_nodes.stdout.strip()
-            console.print(f"Allocated nodes: {num_nodes}")
+            logger.info("Allocated nodes: %s", num_nodes)
         else:
-            console.print(
-                "[yellow]Could not determine node count. srun might default to partial allocation.[/yellow]"
+            logger.warning(
+                "Could not determine node count. srun might default to partial allocation."
             )
             num_nodes = None
 
@@ -170,15 +162,15 @@ def run_slurm_worker(output_dir: Path, period: float, jobid: str):
             cpus_out = res_cpus.stdout.strip()
             cpus_per_node = cpus_out.splitlines()[0].strip()
             cpus_per_node_int = _first_int(cpus_per_node)
-            console.print(f"CPUs per node: {cpus_per_node}")
+            logger.info("CPUs per node: %s", cpus_per_node)
 
         kill_zombie_steps(jobid)
 
-        agent_path = find_worker_binary()
+        worker_path = find_worker_binary()
 
         mem_total_mb = _get_job_memory_total_mb(jobid, cpus_per_node_int)
         if mem_total_mb:
-            console.print(f"Allocated memory per node: {mem_total_mb} MB")
+            logger.info("Allocated memory per node: %s MB", mem_total_mb)
 
         cmd = [
             "srun",
@@ -199,7 +191,7 @@ def run_slurm_worker(output_dir: Path, period: float, jobid: str):
 
         cmd.extend(
             [
-                agent_path,
+                worker_path,
                 "--output",
                 str(output_dir),
                 "--period",
@@ -218,15 +210,13 @@ def run_slurm_worker(output_dir: Path, period: float, jobid: str):
             cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env
         )
 
-        console.print(
-            f"[green]Slurm worker attached. srun PID: {srun_process.pid}[/green]"
-        )
+        logger.info("Slurm worker attached. srun PID: %s", srun_process.pid)
 
         time.sleep(1)
         if srun_process.poll() is not None:
-            console.print("[red]Error: srun failed to start.[/red]")
+            logger.error("srun failed to start.")
             if srun_process.stderr:
-                console.print(srun_process.stderr.read().decode())
+                logger.error(srun_process.stderr.read().decode())
             sys.exit(1)
 
         return srun_process
@@ -235,5 +225,5 @@ def run_slurm_worker(output_dir: Path, period: float, jobid: str):
         # Let the caller handle cleanup
         raise
     except Exception as e:
-        console.print(f"[red]Failed to run slurm worker: {e}[/red]")
+        logger.error("Failed to run slurm worker: %s", e)
         sys.exit(1)

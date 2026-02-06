@@ -1,14 +1,16 @@
 import json
+import logging
 import subprocess
 import time
 
 import pytest
 
 pytestmark = pytest.mark.slurm
+logger = logging.getLogger(__name__)
 
 
 def run_command(cmd, check=True):
-    print(f"Running: {cmd}")
+    logger.info("Running: %s", cmd)
     return subprocess.run(cmd, shell=True, check=check, capture_output=True, text=True)
 
 
@@ -39,10 +41,10 @@ def submit_and_monitor(
 
         res = run_command(cmd)
         job_id = res.stdout.strip()
-        print(f"Submitted Job ID: {job_id}")
+        logger.info("Submitted Job ID: %s", job_id)
 
         # Wait for job to run
-        print("Waiting for job to start...")
+        logger.info("Waiting for job to start...")
         started = False
         state = "UNKNOWN"
         for i in range(20):
@@ -77,7 +79,7 @@ def submit_and_monitor(
             "--headless",
         ]
 
-        print(f"Starting monitoring: {' '.join(monitor_cmd)}")
+        logger.info("Starting monitoring: %s", " ".join(monitor_cmd))
         proc = subprocess.Popen(monitor_cmd)
 
         # Monitor for a bit
