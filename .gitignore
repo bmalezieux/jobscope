@@ -52,6 +52,10 @@ target/
 # Build artifacts
 jobscope-*.data/
 
+# Sphinx
+docs/_build/
+docs/.buildinfo
+
 # Maturin
 *.whl
 
