@@ -1,12 +1,12 @@
 [project]
 name = "jobscope"
 version = "0.1.0"
-description = "System resource monitoring for compute clusters"
+description = "CLI/TUI for live CPU, GPU, memory, and process monitoring on local machines and Slurm jobs"
 readme = "README.md"
 authors = [
     { name = "Benoît Malézieux", email = "benoit.mx2010@gmail.com" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.0.0",
     "rich>=13.0.0",
@@ -29,6 +29,7 @@ dev = [
     "isort>=7.0.0",
     "pytest>=9.0.2",
     "ruff>=0.15.0",
+    "sphinx>=7.2.0",
 ]
 
 [tool.isort]

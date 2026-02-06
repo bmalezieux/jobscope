@@ -1,15 +1,21 @@
 import argparse
+import logging
 import shutil
 import signal
 from datetime import datetime
 from pathlib import Path
 
+from jobscope.logging import configure_logging
 from jobscope.scope import start_monitoring
-from jobscope.worker import run_agent
+from jobscope.worker import run_worker
+
+logger = logging.getLogger(__name__)
 
 
 def main() -> None:
     """Main entry point for the jobscope CLI."""
+    configure_logging()
+
     parser = argparse.ArgumentParser(
         prog="jobscope",
         description="Monitor system resources (CPU, GPU, processes) on compute nodes",
@@ -91,10 +97,10 @@ def main() -> None:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = snapshots_base / timestamp
     output_dir.mkdir(parents=True, exist_ok=True)
-    print(f"Using snapshot directory: {output_dir}")
+    logger.info("Using snapshot directory: %s", output_dir)
 
-    # Spawn agent
-    agent_process = run_agent(
+    # Spawn worker
+    worker_process = run_worker(
         output_dir,
         args.period,
         args.jobid,
@@ -114,43 +120,43 @@ def main() -> None:
 
     try:
         if args.once:
-            print("Refreshed snapshots.")
-            if agent_process:
-                agent_process.wait()
+            logger.info("Refreshed snapshots.")
+            if worker_process:
+                worker_process.wait()
 
             from .scope.get_data import get_latest_snapshots_by_node
 
             snapshots = get_latest_snapshots_by_node(output_dir)
             for hostname, snap in snapshots.items():
-                print(f"Node: {hostname}")
-                print(f"  CPU: {snap.cpus_snapshot.average_cpu_usage:.1f}%")
-                print(
-                    f"  Mem: {snap.cpus_snapshot.memory.used_gb:.1f}/{snap.cpus_snapshot.memory.total_gb:.1f} GB"
+                logger.info("Node: %s", hostname)
+                logger.info("  CPU: %.1f%%", snap.cpus_snapshot.average_cpu_usage)
+                logger.info(
+                    "  Mem: %.1f/%.1f GB",
+                    snap.cpus_snapshot.memory.used_gb,
+                    snap.cpus_snapshot.memory.total_gb,
                 )
         elif args.headless:
-            print(f"Running in headless mode. Logs at {output_dir}")
-            print("Press Ctrl+C to stop.")
+            logger.info("Running in headless mode. Logs at %s", output_dir)
+            logger.info("Press Ctrl+C to stop.")
             import time
 
             while True:
                 time.sleep(1)
         else:
             # Start the monitoring scope (TUI)
-            start_monitoring(
-                output_dir=str(output_dir), period=args.period, once=args.once
-            )
+            start_monitoring(output_dir=str(output_dir), period=args.period)
 
     except KeyboardInterrupt:
         pass
     except Exception as e:
-        print(f"Error in TUI: {e}")
+        logger.error("Error in TUI: %s", e)
     finally:
-        print("\nCleaning up...")
+        logger.info("Cleaning up...")
 
-        from .worker.utils import cleanup_agents
+        from .worker.utils import cleanup_workers
 
-        if agent_process:
-            cleanup_agents(agent_process, args.jobid)
+        if worker_process:
+            cleanup_workers(worker_process, args.jobid)
 
         if args.summary:
             from .scope.get_data import write_snapshots_summary
@@ -161,17 +167,17 @@ def main() -> None:
 
             try:
                 write_snapshots_summary(output_dir, summary_path)
-                print(f"Wrote summary to: {summary_path}")
+                logger.info("Wrote summary to: %s", summary_path)
             except Exception as e:
-                print(f"Warning: Could not write summary: {e}")
+                logger.warning("Could not write summary: %s", e)
 
         # Clean up snapshot directory unless --keep-snapshots is set
         if not args.keep_snapshots:
-            print("Cleaning up snapshot directory...")
+            logger.info("Cleaning up snapshot directory...")
             try:
                 shutil.rmtree(output_dir)
-                print(f"Removed {output_dir}")
+                logger.info("Removed %s", output_dir)
             except Exception as e:
-                print(f"Warning: Could not remove {output_dir}: {e}")
+                logger.warning("Could not remove %s: %s", output_dir, e)
         else:
-            print(f"Snapshots preserved in: {output_dir}")
+            logger.info("Snapshots preserved in: %s", output_dir)

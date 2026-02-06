@@ -3,6 +3,7 @@ import time
 from multiprocessing import Process
 from pathlib import Path
 
+from ..logging import get_logger
 from ..scope.get_data import (
     CPUInfo,
     CPUsSnapshot,
@@ -14,15 +15,21 @@ from ..scope.get_data import (
     Snapshot,
 )
 
+logger = get_logger(__name__)
 
-def run_demo_agent_loop(
+
+def run_demo_worker_loop(
     output_dir: Path, period: float, n_nodes: int, n_cpus: int, n_gpus: int
 ):
     """
     Simulate multiple nodes writing snapshots.
     """
-    print(
-        f"Starting Demo Agent: {n_nodes} nodes, {n_cpus} CPUs, {n_gpus} GPUs. Output: {output_dir}"
+    logger.info(
+        "Starting Demo Worker: %s nodes, %s CPUs, %s GPUs. Output: %s",
+        n_nodes,
+        n_cpus,
+        n_gpus,
+        output_dir,
     )
 
     nodes = [f"node-{i:02d}" for i in range(n_nodes)]
@@ -124,14 +131,14 @@ def run_demo_agent_loop(
             time.sleep(period)
 
     except KeyboardInterrupt:
-        print("Demo agent stopped.")
+        logger.info("Demo worker stopped.")
 
 
 def run_demo_worker(
     output_dir: Path, period: float, n_nodes: int = 1, n_cpus: int = 4, n_gpus: int = 1
 ):
     p = Process(
-        target=run_demo_agent_loop, args=(output_dir, period, n_nodes, n_cpus, n_gpus)
+        target=run_demo_worker_loop, args=(output_dir, period, n_nodes, n_cpus, n_gpus)
     )
     p.start()
     return p

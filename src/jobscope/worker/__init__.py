@@ -5,10 +5,10 @@ from .local_worker import run_local_worker
 from .slurm_worker import run_slurm_worker
 
 
-def run_agent(
+def run_worker(
     output_dir: Path,
     period: float,
-    jobid: int | None = None,
+    jobid: str | None = None,
     once: bool = False,
     demo: bool = False,
     demo_nodes: int = 1,
